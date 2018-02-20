@@ -2,12 +2,13 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 09e8c79760494e2b17f85fdf56e8a85f618fc6d7f37e913abde93279e51e650c
+-- hash: 819b543225b89f7358bcbfd392dcad9ea05ad4d6bb99ca4790b6b7fd1846bf73
 
 name:           market-parser
 version:        0.1.0.0
 category:       parser
 homepage:       https://github.com/jproyo/market-parser#readme
+bug-reports:    https://github.com/jproyo/market-parser/issues
 author:         Juan Pablo Royo Sales
 maintainer:     juanpablo.royo@gmail.com
 copyright:      2018 Juan Pablo Royo Sales
@@ -19,12 +20,46 @@ cabal-version:  >= 1.10
 extra-source-files:
     README.md
 
-executable market-parser
-  main-is: Main.hs
+source-repository head
+  type: git
+  location: https://github.com/jproyo/market-parser
+
+library
   hs-source-dirs:
       src
+  default-extensions: OverloadedStrings
+  ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+  exposed-modules:
+      MarketParser
+  other-modules:
+      Paths_market_parser
+  default-language: Haskell2010
+
+executable mkt-ps
+  main-is: Main.hs
+  hs-source-dirs:
+      mktps
+  default-extensions: OverloadedStrings
+  ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  build-depends:
+      base >=4.7 && <5
+  other-modules:
+      Paths_market_parser
+  default-language: Haskell2010
+
+test-suite spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs:
+      test
+  default-extensions: OverloadedStrings
+  ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  build-depends:
+      QuickCheck
+    , base >=4.7 && <5
+    , hspec
   other-modules:
       Paths_market_parser
   default-language: Haskell2010
