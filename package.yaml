@@ -1,0 +1,20 @@
+name:                market-parser
+version:             0.1.0.0
+#synopsis:
+#description:
+homepage:            https://github.com/jproyo/market-parser#readme
+license:             BSD3
+author:              Juan Pablo Royo Sales
+maintainer:          juanpablo.royo@gmail.com
+copyright:           2018 Juan Pablo Royo Sales
+category:            parser
+extra-source-files:
+- README.md
+
+dependencies:
+  - base >= 4.7 && < 5
+
+executables:
+  market-parser:
+    source-dirs:      src
+    main:             Main.hs
