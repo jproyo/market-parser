@@ -22,6 +22,13 @@ ghc-options:
 
 dependencies:
   - base >= 4.7 && < 5
+  - bytestring
+  - bytestring-conversion
+  - binary
+  - old-time
+  - text
+  - time
+  - unix-time
 
 library:
   source-dirs: src
@@ -31,7 +38,7 @@ default-extensions:
 
 executables:
   mkt-ps:
-    source-dirs:      mktps
+    source-dirs:      [src, mktps]
     main:             Main.hs
 
 tests:

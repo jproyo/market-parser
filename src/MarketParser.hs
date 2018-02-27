@@ -1,3 +1,8 @@
-module MarketParser where
+module MarketParser (parseMarketData) where
 
-parse = undefined
+import qualified Data.ByteString.Lazy    as BL (ByteString)
+import           MarketParser.Parser     (parse)
+import           MarketParser.QuoteModel (Quotes)
+
+parseMarketData :: BL.ByteString -> Quotes
+parseMarketData = parse

@@ -1,5 +1,9 @@
 module Main where
 
+import qualified Data.ByteString.Lazy as BL
+import           MarketParser         (parseMarketData)
+
 main :: IO ()
 main = do
-  putStrLn "hello world"
+  contents <- BL.getContents
+  putStrLn $ show (parseMarketData contents)
