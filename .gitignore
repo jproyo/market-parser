@@ -1,3 +1,4 @@
+test/data
 dist
 dist-*
 cabal-dev
