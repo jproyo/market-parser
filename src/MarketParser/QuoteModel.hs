@@ -32,3 +32,6 @@ data Quote = Quote
 
 newtype Quotes = Quotes [Quote]
   deriving (Show)
+
+data ErrorQuotes = ParseError
+                 | NoAcceptedQuotes

@@ -25,6 +25,7 @@ dependencies:
   - bytestring
   - bytestring-conversion
   - binary
+  - monad-loops
   - old-time
   - text
   - time

@@ -4,8 +4,9 @@ module MarketParser.Parser (parse) where
 
 import           Control.Applicative        ((<|>))
 import           Control.Monad              (guard, replicateM)
+import           Control.Monad.Loops        (untilM)
 import           Data.Binary.Get            (Get, getByteString, getWord32le,
-                                             runGet, skip)
+                                             isEmpty, runGet, skip)
 import           Data.ByteString.Conversion as Conv (fromByteString)
 import qualified Data.ByteString.Lazy       as BL (ByteString)
 import           Data.Maybe                 (fromJust)
@@ -25,10 +26,10 @@ parse :: BL.ByteString -> Quotes
 parse = runGet parseAll
 
 parseAll :: Get Quotes
-parseAll = globalHeader >> Quotes <$> replicateM 5 parseData
+parseAll = pcapHeader >> Quotes <$> untilM parseData isEmpty
 
-globalHeader :: Get ()
-globalHeader = skip 24
+pcapHeader :: Get ()
+pcapHeader = skip 24
 
 parseData :: Get Quote
 parseData = do

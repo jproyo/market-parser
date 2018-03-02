@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5f9c9d293365851aad5cef0ad23daaef7ed46eb633e56f6297407bfb642c62f7
+-- hash: d7b0effeca4f9a44f7816748a5b561c7496c6a3231be932ad0cdb3637f624e22
 
 name:           market-parser
 version:        0.1.0.0
@@ -34,6 +34,7 @@ library
     , binary
     , bytestring
     , bytestring-conversion
+    , monad-loops
     , old-time
     , text
     , time
@@ -58,6 +59,7 @@ executable mkt-ps
     , binary
     , bytestring
     , bytestring-conversion
+    , monad-loops
     , old-time
     , text
     , time
@@ -83,6 +85,7 @@ test-suite spec
     , bytestring
     , bytestring-conversion
     , hspec
+    , monad-loops
     , old-time
     , text
     , time
