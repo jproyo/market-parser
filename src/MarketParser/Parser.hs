@@ -1,12 +1,13 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards  #-}
 
-module MarketParser.Parser (parse) where
+module MarketParser.Parser (getQuotes) where
 
 import           Control.Applicative        ((<|>))
 import           Control.Monad              (guard, replicateM)
 import           Control.Monad.Loops        (untilM)
 import           Data.Binary.Get            (Get, getByteString, getWord32le,
-                                             isEmpty, runGet, skip)
+                                             isEmpty, label, runGet, skip)
 import           Data.ByteString.Conversion as Conv (fromByteString)
 import qualified Data.ByteString.Lazy       as BL (ByteString)
 import           Data.Maybe                 (fromJust)
@@ -16,75 +17,89 @@ import           Data.UnixTime              (UnixTime (..))
 import           MarketParser.QuoteModel
 
 
-validPacketSize :: Int
-validPacketSize = 215
+isValidPacketSize :: Int -> Bool
+isValidPacketSize size = size == 215
 
-validASCIIQuote :: T.Text
-validASCIIQuote = "B6034"
+isValidQuote :: T.Text -> Bool
+isValidQuote mark = mark == "B6034"
 
-parse :: BL.ByteString -> Quotes
-parse = runGet parseAll
+getQuotes :: BL.ByteString -> Maybe Quotes
+getQuotes str = runGet allQuotes str
 
-parseAll :: Get Quotes
-parseAll = pcapHeader >> Quotes <$> untilM parseData isEmpty
+allQuotes :: Get (Maybe Quotes)
+allQuotes = pcapHeader >> Just <$> (untilM getQuote isEmpty) <|> pure Nothing
 
 pcapHeader :: Get ()
 pcapHeader = skip 24
 
-parseData :: Get Quote
-parseData = do
-  pktTimeV   <- parsePktTime
-  packetSize <- parsePaketSize
-  (guard (packetSize == validPacketSize) >> continueParsing pktTimeV) <|> skipAndParse packetSize
-  where skipAndParse    bytes     = skip bytes >> parseData
-        continueParsing pktTimeV  = do
-          dataInfoMarketType <- Enc.decodeUtf8 <$> getByteString 5
-          (guard (dataInfoMarketType == validASCIIQuote) >> parseQuote pktTimeV dataInfoMarketType) <|> skipAndParse 210
+skipAndGetQuote :: Int -> Get Quote
+skipAndGetQuote pktSize = skip pktSize >> getQuote
 
-parsePaketSize :: Get Int
-parsePaketSize = do
+getQuote :: Get Quote
+getQuote = label "GET QUOTE" $ do
+  pktTimeV    <- packetTime
+  packetSizeV <- packetSize
+  (guard (isValidPacketSize packetSizeV) >> continueParsing pktTimeV) <|> skipAndGetQuote packetSizeV
+  where continueParsing pktTimeV  = do
+          dataInfoMarketType <- Enc.decodeUtf8 <$> getByteString 5
+          (guard (isValidQuote dataInfoMarketType) >> quote pktTimeV dataInfoMarketType) <|> skipAndGetQuote 210
+
+intNumber :: Get Integer
+intNumber = toInteger <$> getWord32le
+
+packetSize :: Get Int
+packetSize = label "GET PACKET SIZE" $ do
   skip 4
-  paket <- (abs . ((-) 42) . fromInteger . toInteger) <$> getWord32le
+  paket <- (abs . ((-) 42) . fromInteger) <$> intNumber
   skip 42
   return paket
 
-parsePktTime :: Get UnixTime
-parsePktTime = do
-  utSeconds      <- (fromIntegral . toInteger) <$> getWord32le
-  utMicroSeconds <- (fromIntegral . toInteger) <$> getWord32le
+packetTime :: Get UnixTime
+packetTime = label "GET PACKET TIME" $ do
+  utSeconds      <- fromInteger <$> intNumber
+  utMicroSeconds <- fromInteger <$> intNumber
   return UnixTime {..}
 
-parseBestPriceQuantity :: Get QuoteBstPrcQty
-parseBestPriceQuantity = do
+bestPriceQuantity :: Get QuoteBstPrcQty
+bestPriceQuantity = do
   bestPrice    <- (fromJust . Conv.fromByteString) <$> getByteString 5
   bestQuantity <- (fromJust . Conv.fromByteString) <$> getByteString 7
   return QuoteBstPrcQty {..}
 
-parseBestPriceQuantities :: Get [QuoteBstPrcQty]
-parseBestPriceQuantities = replicateM 5 parseBestPriceQuantity
+bestPriceQuantities :: Get [QuoteBstPrcQty]
+bestPriceQuantities = replicateM 5 bestPriceQuantity
 
-parseQuoteDetail :: Get QuoteDetail
-parseQuoteDetail = do
-  totalQuoteVol <- (fromJust . Conv.fromByteString) <$> getByteString 7
-  priceQty      <- parseBestPriceQuantities
-  return QuoteDetail {..}
+totalVol :: Get Int
+totalVol = (fromJust . Conv.fromByteString) <$> getByteString 7
 
-parseQuoteBest :: Get QuoteBest
-parseQuoteBest = do
+quoteBest :: Get QuoteBest
+quoteBest = do
   totalValid <- (fromJust . Conv.fromByteString) <$> getByteString 5
   bestQuote  <- replicateM 5 $ (fromJust . Conv.fromByteString) <$> getByteString 4
   return QuoteBest {..}
 
-parseQuote :: UnixTime -> T.Text -> Get Quote
-parseQuote pktTime dataInfoMarketType = do
+issueCodeP :: Get String
+issueCodeP = (T.unpack . Enc.decodeUtf8) <$> getByteString 12
+
+issueSeqP :: Get Int
+issueSeqP = (fromJust . Conv.fromByteString) <$> getByteString 3
+
+marketStatusTypeP :: Get String
+marketStatusTypeP = (T.unpack . Enc.decodeUtf8) <$> getByteString 2
+
+acceptTimeP :: Get String
+acceptTimeP = (T.unpack . Enc.decodeUtf8) <$> getByteString 8
+
+quote :: UnixTime -> T.Text -> Get Quote
+quote pktTime dataInfoMarketType = do
   let marketType   = [last . T.unpack $ dataInfoMarketType]
-  issueCode        <- (T.unpack . Enc.decodeUtf8) <$> getByteString 12
-  issueSeq         <- (fromJust . Conv.fromByteString) <$> getByteString 3
-  marketStatusType <- (T.unpack . Enc.decodeUtf8) <$> getByteString 2
-  bidDetail        <- parseQuoteDetail
-  askDetail        <- parseQuoteDetail
-  bestBid          <- parseQuoteBest
-  bestAsk          <- parseQuoteBest
-  acceptTime       <- (T.unpack . Enc.decodeUtf8) <$> getByteString 8
+  issueCode        <- issueCodeP
+  issueSeq         <- issueSeqP
+  marketStatusType <- marketStatusTypeP
+  bidDetail        <- QuoteBestBid <$> totalVol <*> bestPriceQuantities
+  askDetail        <- QuoteBestAsk <$> totalVol <*> bestPriceQuantities
+  bestBid          <- quoteBest
+  bestAsk          <- quoteBest
+  acceptTime       <- acceptTimeP
   skip 1
   return $ Quote {..}

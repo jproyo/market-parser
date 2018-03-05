@@ -1,8 +1,8 @@
 module MarketParser (parseMarketData) where
 
 import qualified Data.ByteString.Lazy    as BL (ByteString)
-import           MarketParser.Parser     (parse)
-import           MarketParser.QuoteModel (ErrorQuotes, Quotes)
+import           MarketParser.Parser     (getQuotes)
+import           MarketParser.QuoteModel (Quotes)
 
-parseMarketData :: BL.ByteString -> Quotes
-parseMarketData = parse
+parseMarketData :: BL.ByteString -> Maybe Quotes
+parseMarketData = getQuotes
