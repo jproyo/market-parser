@@ -44,11 +44,19 @@ bash.$ stack test
 bash.$ stack test
 ```
 
-### Startup Server
+### Run Solution
 
 ```shell
 bash.$ stack build
+
+//Without any sorting
+
 bash.$ stack exec mkt-ps < FILE_PATH_WITH_DATA
+
+
+//To sort results by accept time quote
+
+bash.$ stack exec mkt-ps -- -r < FILE_PATH_WITH_DATA  
 ```
 
 #### Run without Nix integration

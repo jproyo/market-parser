@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d7b0effeca4f9a44f7816748a5b561c7496c6a3231be932ad0cdb3637f624e22
+-- hash: 615f42319712ff5da2668ee5218bbdca88dd688d98e4c0142ae093b375994237
 
 name:           market-parser
 version:        0.1.0.0
@@ -40,7 +40,6 @@ library
     , time
     , unix-time
   exposed-modules:
-      MarketParser
       MarketParser.Parser
       MarketParser.QuoteModel
   other-modules:
@@ -65,7 +64,6 @@ executable mkt-ps
     , time
     , unix-time
   other-modules:
-      MarketParser
       MarketParser.Parser
       MarketParser.QuoteModel
       Paths_market_parser

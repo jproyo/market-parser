@@ -1,21 +1,39 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecordWildCards  #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
-module MarketParser.Parser (getQuotes) where
+module MarketParser.Parser (ParseStrategy(..), getQuotes) where
 
-import           Control.Applicative        ((<|>))
-import           Control.Monad              (guard, replicateM)
-import           Control.Monad.Loops        (untilM)
-import           Data.Binary.Get            (Get, getByteString, getWord32le,
-                                             isEmpty, label, runGet, skip)
-import           Data.ByteString.Conversion as Conv (fromByteString)
-import qualified Data.ByteString.Lazy       as BL (ByteString)
-import           Data.Maybe                 (fromJust)
-import qualified Data.Text                  as T (Text, unpack)
-import qualified Data.Text.Encoding         as Enc (decodeUtf8)
-import           Data.UnixTime              (UnixTime (..))
+import           Control.Applicative           ((<|>))
+import           Control.Monad                 (guard, replicateM)
+import           Data.Binary.Get               (Decoder (..), Get,
+                                                getByteString, getWord32le,
+                                                label, lookAheadM,
+                                                runGetIncremental, skip)
+import qualified Data.ByteString               as BS (ByteString, null)
+import           Data.ByteString.Builder       (toLazyByteString, word32Hex)
+import           Data.ByteString.Conversion    as Conv (fromByteString)
+import qualified Data.ByteString.Lazy          as BL (ByteString, empty)
+import qualified Data.ByteString.Lazy.Char8    as BLC (pack)
+import qualified Data.ByteString.Lazy.Internal as BLI (ByteString (Chunk),
+                                                       chunk)
+import           Data.Fixed                    (Fixed (MkFixed))
+import           Data.List                     (insert)
+import           Data.Maybe                    (fromJust, fromMaybe, isJust)
+import qualified Data.Text                     as T (Text, unpack)
+import qualified Data.Text.Encoding            as Enc (decodeUtf8)
+import           Data.Time.LocalTime           (TimeOfDay, makeTimeOfDayValid,
+                                                midnight)
+import           Data.UnixTime                 (UnixTime (..))
 import           MarketParser.QuoteModel
 
+data ParseStrategy = SortByAcceptTime
+                   | Unsorted
+
+
+insertWith :: Ord a => ParseStrategy -> a -> [a] -> [a]
+insertWith p = case p of
+  SortByAcceptTime -> insert
+  Unsorted         -> (:)
 
 isValidPacketSize :: Int -> Bool
 isValidPacketSize size = size == 215
@@ -23,14 +41,40 @@ isValidPacketSize size = size == 215
 isValidQuote :: T.Text -> Bool
 isValidQuote mark = mark == "B6034"
 
-getQuotes :: BL.ByteString -> Maybe Quotes
-getQuotes str = runGet allQuotes str
+getQuotes :: BL.ByteString -> ParseStrategy -> Either String Quotes
+getQuotes = decodeQuote decoder
 
-allQuotes :: Get (Maybe Quotes)
-allQuotes = pcapHeader >> Just <$> (untilM getQuote isEmpty) <|> pure Nothing
+decodeQuote :: Decoder Quote -> BL.ByteString -> ParseStrategy -> Either String Quotes
+decodeQuote (Done leftover _consumed quoteDec) input strategy = if BS.null leftover then Right [quoteDec]
+                                                                else fmap ((insertWith strategy) quoteDec) $ decodeQuote decoder (BLI.chunk leftover input) strategy
+decodeQuote (Partial k) input strategy                        = decodeQuote (k . takeHeadChunk $ input) (dropHeadChunk input) strategy
+decodeQuote (Fail _leftover _consumed msg) _ _                = Left msg
 
-pcapHeader :: Get ()
-pcapHeader = skip 24
+decoder :: Decoder Quote
+decoder = runGetIncremental headerOrQuote
+
+takeHeadChunk :: BL.ByteString -> Maybe BS.ByteString
+takeHeadChunk lbs =
+  case lbs of
+    (BLI.Chunk bs _) -> Just bs
+    _                -> Nothing
+
+dropHeadChunk :: BL.ByteString -> BL.ByteString
+dropHeadChunk lbs =
+  case lbs of
+    (BLI.Chunk _ lbs') -> lbs'
+    _                  -> BL.empty
+
+headerOrQuote :: Get Quote
+headerOrQuote = do
+  attemp <- lookAheadM pcapHeader
+  (guard (isJust attemp) >> skip 20 *> getQuote) <|> getQuote
+
+
+pcapHeader :: Get (Maybe BL.ByteString)
+pcapHeader = do
+  magic <- (toLazyByteString . word32Hex) <$> getWord32le
+  if magic == BLC.pack "a1b2c3d4" then return (Just magic) else return Nothing
 
 skipAndGetQuote :: Int -> Get Quote
 skipAndGetQuote pktSize = skip pktSize >> getQuote
@@ -61,7 +105,7 @@ packetTime = label "GET PACKET TIME" $ do
   return UnixTime {..}
 
 bestPriceQuantity :: Get QuoteBstPrcQty
-bestPriceQuantity = do
+bestPriceQuantity = label "GET BEST PRICE QUANTITY" $ do
   bestPrice    <- (fromJust . Conv.fromByteString) <$> getByteString 5
   bestQuantity <- (fromJust . Conv.fromByteString) <$> getByteString 7
   return QuoteBstPrcQty {..}
@@ -73,7 +117,7 @@ totalVol :: Get Int
 totalVol = (fromJust . Conv.fromByteString) <$> getByteString 7
 
 quoteBest :: Get QuoteBest
-quoteBest = do
+quoteBest = label "GET BEST QUOTE" $ do
   totalValid <- (fromJust . Conv.fromByteString) <$> getByteString 5
   bestQuote  <- replicateM 5 $ (fromJust . Conv.fromByteString) <$> getByteString 4
   return QuoteBest {..}
@@ -87,8 +131,13 @@ issueSeqP = (fromJust . Conv.fromByteString) <$> getByteString 3
 marketStatusTypeP :: Get String
 marketStatusTypeP = (T.unpack . Enc.decodeUtf8) <$> getByteString 2
 
-acceptTimeP :: Get String
-acceptTimeP = (T.unpack . Enc.decodeUtf8) <$> getByteString 8
+acceptTimeP :: Get TimeOfDay
+acceptTimeP = label "GET ACCEPT TIME" $  do
+  time <- (T.unpack . Enc.decodeUtf8) <$> getByteString 8
+  let hour = read . (take 2)
+  let minute = read . (take 2) . (drop 2)
+  let sec = MkFixed . read . (take 2) . (drop 4)
+  return $ fromMaybe midnight (makeTimeOfDayValid (hour time) (minute time) (sec time))
 
 quote :: UnixTime -> T.Text -> Get Quote
 quote pktTime dataInfoMarketType = do

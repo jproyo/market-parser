@@ -1,8 +1,9 @@
 module MarketParser.QuoteModel where
 
-import           Data.Monoid   ((<>))
-import           Data.UnixTime (UnixTime (..))
-import           Data.UnixTime (formatUnixTimeGMT, webDateFormat)
+import           Data.Monoid         ((<>))
+import           Data.Time.LocalTime (TimeOfDay)
+import           Data.UnixTime       (UnixTime (..))
+import           Data.UnixTime       (formatUnixTimeGMT, webDateFormat)
 
 data QuoteBstPrcQty = QuoteBstPrcQty
   { bestPrice    :: Double,
@@ -24,7 +25,7 @@ data QuoteBest = QuoteBest
 
 data Quote = Quote
   { pktTime          :: UnixTime,
-    acceptTime       :: String,
+    acceptTime       :: TimeOfDay,
     issueCode        :: String,
     issueSeq         :: Int,
     marketType       :: String,
@@ -37,10 +38,18 @@ data Quote = Quote
 
 type Quotes = [Quote]
 
+instance Eq Quote where
+  (==) q1 q2 = (issueCode q1) == (issueCode q2) && (issueSeq q1) == (issueSeq q2) && (marketType q1) == (marketType q2)
+  (/=) q1 q2 = not $ (==) q1 q2
+
+instance Ord Quote where
+  compare q1 q2 = (acceptTime q1) `compare` (acceptTime q2)
+  (<=)    q1 q2 = (acceptTime q1) <= (acceptTime q2)
+
 instance Show Quote where
   show q = "<quote>"
         <> "<pkt-time>" <> (show $ formatUnixTimeGMT webDateFormat (pktTime q)) <> "</pkt-time>"
-        <> "<accept-time>" <> (acceptTime q) <> "</accept-time>"
+        <> "<accept-time>" <> (show $ acceptTime q) <> "</accept-time>"
         <> "<issue-code>" <> (issueCode q) <> "</issue-code>"
         <> (show $ bidDetail q)
         <> "<asks>" <> (show $ askDetail q) <> "</asks>"
