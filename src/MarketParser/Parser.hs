@@ -31,9 +31,8 @@ data ParseStrategy = SortByAcceptTime
 
 
 insertWith :: Ord a => ParseStrategy -> a -> [a] -> [a]
-insertWith p = case p of
-  SortByAcceptTime -> insert
-  Unsorted         -> (:)
+insertWith SortByAcceptTime = insert
+insertWith Unsorted         = (:)
 
 isValidPacketSize :: Int -> Bool
 isValidPacketSize size = size == 215
@@ -45,25 +44,24 @@ getQuotes :: BL.ByteString -> ParseStrategy -> Either String Quotes
 getQuotes = decodeQuote decoder
 
 decodeQuote :: Decoder Quote -> BL.ByteString -> ParseStrategy -> Either String Quotes
-decodeQuote (Done leftover _consumed quoteDec) input strategy = if BS.null leftover then Right [quoteDec]
-                                                                else fmap ((insertWith strategy) quoteDec) $ decodeQuote decoder (BLI.chunk leftover input) strategy
-decodeQuote (Partial k) input strategy                        = decodeQuote (k . takeHeadChunk $ input) (dropHeadChunk input) strategy
-decodeQuote (Fail _leftover _consumed msg) _ _                = Left msg
+decodeQuote (Done leftover _consumed quoteDec) input strategy =
+  if BS.null leftover then Right [quoteDec]
+  else fmap ((insertWith strategy) quoteDec) $ decodeQuote decoder (BLI.chunk leftover input) strategy
+decodeQuote (Partial k) input strategy                        =
+  decodeQuote (k . takeHeadChunk $ input) (dropHeadChunk input) strategy
+decodeQuote (Fail _leftover _consumed msg) _ _                =
+  Left msg
 
 decoder :: Decoder Quote
 decoder = runGetIncremental headerOrQuote
 
 takeHeadChunk :: BL.ByteString -> Maybe BS.ByteString
-takeHeadChunk lbs =
-  case lbs of
-    (BLI.Chunk bs _) -> Just bs
-    _                -> Nothing
+takeHeadChunk (BLI.Chunk bs _) = Just bs
+takeHeadChunk _                = Nothing
 
 dropHeadChunk :: BL.ByteString -> BL.ByteString
-dropHeadChunk lbs =
-  case lbs of
-    (BLI.Chunk _ lbs') -> lbs'
-    _                  -> BL.empty
+dropHeadChunk (BLI.Chunk _ lbs) = lbs
+dropHeadChunk _                 = BL.empty
 
 headerOrQuote :: Get Quote
 headerOrQuote = do
