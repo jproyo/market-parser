@@ -8,7 +8,7 @@ main :: IO ()
 main = do
   orderStrategy <- getArgs >>= parse
   contents      <- BL.getContents
-  putStrLn $ show (getQuotes contents orderStrategy)
+  print (getQuotes contents orderStrategy)
 
 parse :: [String] -> IO ParseStrategy
 parse ["-r"] = return SortByAcceptTime
