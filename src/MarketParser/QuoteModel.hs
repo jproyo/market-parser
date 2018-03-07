@@ -2,8 +2,8 @@ module MarketParser.QuoteModel where
 
 import           Data.Monoid         ((<>))
 import           Data.Time.LocalTime (TimeOfDay)
-import           Data.UnixTime       (UnixTime (..))
-import           Data.UnixTime       (formatUnixTimeGMT, webDateFormat)
+import           Data.UnixTime       (UnixTime (..), formatUnixTimeGMT,
+                                      webDateFormat)
 
 data QuoteBstPrcQty = QuoteBstPrcQty
   { bestPrice    :: Double,
@@ -39,28 +39,34 @@ data Quote = Quote
 type Quotes = [Quote]
 
 instance Eq Quote where
-  (==) q1 q2 = (issueCode q1) == (issueCode q2) && (issueSeq q1) == (issueSeq q2) && (marketType q1) == (marketType q2)
+  (==) q1 q2 = issueCode q1 == issueCode q2
+            && issueSeq q1 == issueSeq q2
+            && marketType q1 == marketType q2
   (/=) q1 q2 = not $ (==) q1 q2
 
 instance Ord Quote where
-  compare q1 q2 = (acceptTime q1) `compare` (acceptTime q2)
-  (<=)    q1 q2 = (acceptTime q1) <= (acceptTime q2)
+  compare q1 q2 = acceptTime q1 `compare` acceptTime q2
+  (<=)    q1 q2 = acceptTime q1 <= acceptTime q2
 
 instance Show Quote where
   show q = "<quote>"
-        <> "<pkt-time>" <> (show $ formatUnixTimeGMT webDateFormat (pktTime q)) <> "</pkt-time>"
-        <> "<accept-time>" <> (show $ acceptTime q) <> "</accept-time>"
-        <> "<issue-code>" <> (issueCode q) <> "</issue-code>"
-        <> (show $ bidDetail q)
-        <> "<asks>" <> (show $ askDetail q) <> "</asks>"
+        <> "<pkt-time>" <> show (formatUnixTimeGMT webDateFormat (pktTime q)) <> "</pkt-time>"
+        <> "<accept-time>" <> show (acceptTime q) <> "</accept-time>"
+        <> "<issue-code>" <> issueCode q <> "</issue-code>"
+        <> show (bidDetail q)
+        <> "<asks>" <> show (askDetail q) <> "</asks>"
         <> "</quote>"
 
 showPrice :: String -> (Int, QuoteBstPrcQty) -> String
-showPrice mark (nro, prcQty) = "<" <> mark <> "qty" <> (show nro) <> ">" <> (show $ bestQuantity prcQty) <> "</" <> mark <> "qty" <> (show nro) <> ">"
-                            <> "<" <> mark <> "price" <> (show nro) <> ">" <> (show $ bestPrice prcQty) <> "</" <> mark <> "price" <> (show nro) <> ">"
+showPrice mark (nro, prcQty) = "<" <> mark <> "qty" <> show nro <> ">"
+                            <> show (bestQuantity prcQty)
+                            <> "</" <> mark <> "qty" <> show nro <> ">"
+                            <> "<" <> mark <> "price" <> show nro <> ">"
+                            <> show (bestPrice prcQty)
+                            <> "</" <> mark <> "price" <> show nro <> ">"
 
 instance Show QuoteBestBid where
-  show bid = "<bids>" <> (concat $ map (showPrice "b") (reverse $ zip [1..5] (priceBidQty bid))) <> "</bids>"
+  show bid = "<bids>" <> concatMap (showPrice "b") (reverse $ zip [1..5] (priceBidQty bid)) <> "</bids>"
 
 instance Show QuoteBestAsk where
-  show ask = "<asks>" <> (concat $ map (showPrice "a") (zip [1..5] (priceAskQty ask))) <> "</asks>"
+  show ask = "<asks>" <> concatMap (showPrice "a") (zip [1..5] (priceAskQty ask)) <> "</asks>"

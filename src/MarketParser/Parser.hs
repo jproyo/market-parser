@@ -46,7 +46,7 @@ getQuotes = decodeQuote decoder
 decodeQuote :: Decoder Quote -> BL.ByteString -> ParseStrategy -> Either String Quotes
 decodeQuote (Done leftover _consumed quoteDec) input strategy =
   if BS.null leftover then Right [quoteDec]
-  else fmap ((insertWith strategy) quoteDec) $ decodeQuote decoder (BLI.chunk leftover input) strategy
+  else insertWith strategy quoteDec <$> decodeQuote decoder (BLI.chunk leftover input) strategy
 decodeQuote (Partial k) input strategy                        =
   decodeQuote (k . takeHeadChunk $ input) (dropHeadChunk input) strategy
 decodeQuote (Fail _leftover _consumed msg) _ _                =
@@ -92,7 +92,7 @@ intNumber = toInteger <$> getWord32le
 packetSize :: Get Int
 packetSize = label "GET PACKET SIZE" $ do
   skip 4
-  paket <- (abs . ((-) 42) . fromInteger) <$> intNumber
+  paket <- (abs . (42 -) . fromInteger) <$> intNumber
   skip 42
   return paket
 
@@ -132,9 +132,9 @@ marketStatusTypeP = (T.unpack . Enc.decodeUtf8) <$> getByteString 2
 acceptTimeP :: Get TimeOfDay
 acceptTimeP = label "GET ACCEPT TIME" $  do
   time <- (T.unpack . Enc.decodeUtf8) <$> getByteString 8
-  let hour = read . (take 2)
-  let minute = read . (take 2) . (drop 2)
-  let sec = MkFixed . read . (take 2) . (drop 4)
+  let hour = read . take 2
+  let minute = read . take 2 . drop 2
+  let sec = MkFixed . read . take 2 . drop 4
   return $ fromMaybe midnight (makeTimeOfDayValid (hour time) (minute time) (sec time))
 
 quote :: UnixTime -> T.Text -> Get Quote
@@ -149,4 +149,4 @@ quote pktTime dataInfoMarketType = do
   bestAsk          <- quoteBest
   acceptTime       <- acceptTimeP
   skip 1
-  return $ Quote {..}
+  return Quote {..}
