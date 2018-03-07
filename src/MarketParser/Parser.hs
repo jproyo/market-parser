@@ -45,8 +45,9 @@ getQuotes = decodeQuote decoder
 
 decodeQuote :: Decoder Quote -> BL.ByteString -> ParseStrategy -> Either String Quotes
 decodeQuote (Done leftover _consumed quoteDec) input strategy =
-  if BS.null leftover then Right [quoteDec]
-  else insertWith strategy quoteDec <$> decodeQuote decoder (BLI.chunk leftover input) strategy
+  let restChunk = BLI.chunk leftover input
+  in if BS.null leftover then Right [quoteDec] else
+     insertWith strategy quoteDec <$> decodeQuote decoder restChunk strategy
 decodeQuote (Partial k) input strategy                        =
   decodeQuote (k . takeHeadChunk $ input) (dropHeadChunk input) strategy
 decodeQuote (Fail _leftover _consumed msg) _ _                =
