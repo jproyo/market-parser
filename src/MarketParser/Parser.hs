@@ -11,7 +11,8 @@ import           Data.Binary.Get               (Decoder (..), Get,
                                                 runGetIncremental, skip)
 import qualified Data.ByteString               as BS (ByteString, null)
 import           Data.ByteString.Builder       (toLazyByteString, word32Hex)
-import           Data.ByteString.Conversion    as Conv (fromByteString)
+import           Data.ByteString.Conversion    as Conv (FromByteString,
+                                                        fromByteString)
 import qualified Data.ByteString.Lazy          as BL (ByteString, empty)
 import qualified Data.ByteString.Lazy.Char8    as BLC (pack)
 import qualified Data.ByteString.Lazy.Internal as BLI (ByteString (Chunk),
@@ -43,15 +44,19 @@ isValidQuote mark = mark == "B6034"
 getQuotes :: BL.ByteString -> ParseStrategy -> Either String Quotes
 getQuotes = decodeQuote decoder
 
-decodeQuote :: Decoder Quote -> BL.ByteString -> ParseStrategy -> Either String Quotes
+decodeQuote
+  :: Decoder Quote -> BL.ByteString -> ParseStrategy -> Either String Quotes
 decodeQuote (Done leftover _consumed quoteDec) input strategy =
   let restChunk = BLI.chunk leftover input
-  in if BS.null leftover then Right [quoteDec] else
-     insertWith strategy quoteDec <$> decodeQuote decoder restChunk strategy
-decodeQuote (Partial k) input strategy                        =
+  in
+    if BS.null leftover
+    then
+      Right [quoteDec]
+    else
+      insertWith strategy quoteDec <$> decodeQuote decoder restChunk strategy
+decodeQuote (Partial k) input strategy =
   decodeQuote (k . takeHeadChunk $ input) (dropHeadChunk input) strategy
-decodeQuote (Fail _leftover _consumed msg) _ _                =
-  Left msg
+decodeQuote (Fail _leftover _consumed msg) _ _ = Left msg
 
 decoder :: Decoder Quote
 decoder = runGetIncremental headerOrQuote
@@ -72,7 +77,7 @@ headerOrQuote = do
 
 pcapHeader :: Get (Maybe BL.ByteString)
 pcapHeader = do
-  magic <- (toLazyByteString . word32Hex) <$> getWord32le
+  magic <- toLazyByteString . word32Hex <$> getWord32le
   if magic == BLC.pack "a1b2c3d4" then return (Just magic) else return Nothing
 
 skipAndGetQuote :: Int -> Get Quote
@@ -82,10 +87,15 @@ getQuote :: Get Quote
 getQuote = label "GET QUOTE" $ do
   pktTimeV    <- packetTime
   packetSizeV <- packetSize
-  (guard (isValidPacketSize packetSizeV) >> continueParsing pktTimeV) <|> skipAndGetQuote packetSizeV
-  where continueParsing pktTimeV  = do
-          dataInfoMarketType <- Enc.decodeUtf8 <$> getByteString 5
-          (guard (isValidQuote dataInfoMarketType) >> quote pktTimeV dataInfoMarketType) <|> skipAndGetQuote 210
+  (guard (isValidPacketSize packetSizeV) >> continueParsing pktTimeV)
+    <|> skipAndGetQuote packetSizeV
+ where
+  continueParsing pktTimeV = do
+    dataInfoMarketType <- Enc.decodeUtf8 <$> getByteString 5
+    (  guard (isValidQuote dataInfoMarketType)
+      >> quote pktTimeV dataInfoMarketType
+      )
+      <|> skipAndGetQuote 210
 
 intNumber :: Get Integer
 intNumber = toInteger <$> getWord32le
@@ -93,7 +103,7 @@ intNumber = toInteger <$> getWord32le
 packetSize :: Get Int
 packetSize = label "GET PACKET SIZE" $ do
   skip 4
-  paket <- (abs . (42 -) . fromInteger) <$> intNumber
+  paket <- abs . (42 -) . fromInteger <$> intNumber
   skip 42
   return paket
 
@@ -103,44 +113,51 @@ packetTime = label "GET PACKET TIME" $ do
   utMicroSeconds <- fromInteger <$> intNumber
   return UnixTime {..}
 
+convertToNumber :: Conv.FromByteString a => BS.ByteString -> a
+convertToNumber = fromJust . Conv.fromByteString
+
 bestPriceQuantity :: Get QuoteBstPrcQty
 bestPriceQuantity = label "GET BEST PRICE QUANTITY" $ do
-  bestPrice    <- (fromJust . Conv.fromByteString) <$> getByteString 5
-  bestQuantity <- (fromJust . Conv.fromByteString) <$> getByteString 7
+  bestPrice    <- convertToNumber <$> getByteString 5
+  bestQuantity <- convertToNumber <$> getByteString 7
   return QuoteBstPrcQty {..}
 
 bestPriceQuantities :: Get [QuoteBstPrcQty]
 bestPriceQuantities = replicateM 5 bestPriceQuantity
 
 totalVol :: Get Int
-totalVol = (fromJust . Conv.fromByteString) <$> getByteString 7
+totalVol = convertToNumber <$> getByteString 7
 
 quoteBest :: Get QuoteBest
 quoteBest = label "GET BEST QUOTE" $ do
-  totalValid <- (fromJust . Conv.fromByteString) <$> getByteString 5
-  bestQuote  <- replicateM 5 $ (fromJust . Conv.fromByteString) <$> getByteString 4
+  totalValid <- convertToNumber <$> getByteString 5
+  bestQuote  <- replicateM 5 $ convertToNumber <$> getByteString 4
   return QuoteBest {..}
 
+readString :: BS.ByteString -> String
+readString = T.unpack . Enc.decodeUtf8
+
 issueCodeP :: Get String
-issueCodeP = (T.unpack . Enc.decodeUtf8) <$> getByteString 12
+issueCodeP = readString <$> getByteString 12
 
 issueSeqP :: Get Int
-issueSeqP = (fromJust . Conv.fromByteString) <$> getByteString 3
+issueSeqP = convertToNumber <$> getByteString 3
 
 marketStatusTypeP :: Get String
-marketStatusTypeP = (T.unpack . Enc.decodeUtf8) <$> getByteString 2
+marketStatusTypeP = readString <$> getByteString 2
 
 acceptTimeP :: Get TimeOfDay
-acceptTimeP = label "GET ACCEPT TIME" $  do
-  time <- (T.unpack . Enc.decodeUtf8) <$> getByteString 8
-  let hour = read . take 2
+acceptTimeP = label "GET ACCEPT TIME" $ do
+  time <- readString <$> getByteString 8
+  let hour   = read . take 2
   let minute = read . take 2 . drop 2
-  let sec = MkFixed . read . take 2 . drop 4
-  return $ fromMaybe midnight (makeTimeOfDayValid (hour time) (minute time) (sec time))
+  let sec    = MkFixed . read . take 2 . drop 4
+  return $ fromMaybe midnight
+                     (makeTimeOfDayValid (hour time) (minute time) (sec time))
 
 quote :: UnixTime -> T.Text -> Get Quote
 quote pktTime dataInfoMarketType = do
-  let marketType   = [last . T.unpack $ dataInfoMarketType]
+  let marketType = [last . T.unpack $ dataInfoMarketType]
   issueCode        <- issueCodeP
   issueSeq         <- issueSeqP
   marketStatusType <- marketStatusTypeP

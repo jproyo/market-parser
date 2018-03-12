@@ -58,12 +58,29 @@ instance Show Quote where
         <> "</quote>"
 
 showPrice :: String -> (Int, QuoteBstPrcQty) -> String
-showPrice mark (nro, prcQty) = "<" <> mark <> "qty" <> show nro <> ">"
-                            <> show (bestQuantity prcQty)
-                            <> "</" <> mark <> "qty" <> show nro <> ">"
-                            <> "<" <> mark <> "price" <> show nro <> ">"
-                            <> show (bestPrice prcQty)
-                            <> "</" <> mark <> "price" <> show nro <> ">"
+showPrice mark (nro, prcQty) =
+  "<"
+    <> mark
+    <> "qty"
+    <> show nro
+    <> ">"
+    <> show (bestQuantity prcQty)
+    <> "</"
+    <> mark
+    <> "qty"
+    <> show nro
+    <> ">"
+    <> "<"
+    <> mark
+    <> "price"
+    <> show nro
+    <> ">"
+    <> show (bestPrice prcQty)
+    <> "</"
+    <> mark
+    <> "price"
+    <> show nro
+    <> ">"
 
 instance Show QuoteBestBid where
   show bid = "<bids>" <> concatMap (showPrice "b") (reverse $ zip [1..5] (priceBidQty bid)) <> "</bids>"

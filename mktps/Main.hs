@@ -12,4 +12,4 @@ main = do
 
 parse :: [String] -> IO ParseStrategy
 parse ["-r"] = return SortByAcceptTime
-parse _      = putStrLn "Usage: -r to sort by accept time quote" >> return Unsorted
+parse _ = putStrLn "Usage: -r to sort by accept time quote" >> return Unsorted
